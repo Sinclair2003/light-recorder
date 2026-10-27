@@ -15,7 +15,10 @@
 - **自由选择声源**：系统声音、麦克风，或同时录制。
 - **灵活控制**：暂停、继续，录制中切换来源和麦克风。
 - **录完即用**：保存为一个 M4A 文件，内置列表、播放器和删除功能。
+- **转写 Beta**：在独立页面将录音转成中文文字，可导出 TXT 或带时间信息的 JSON。
 - **安心留在本地**：无需账号或额外驱动；关闭窗口后，菜单栏继续录音。
+
+公开下载包为稳定版；转写 Beta 已开放源码，尚未提供独立安装包。
 
 ## 开始使用
 
@@ -35,4 +38,4 @@
 ./scripts/install.sh
 ```
 
-[测试与验收](docs/TESTING.md) · [反馈问题](https://github.com/Sinclair2003/light-recorder/issues)
+[转写 Beta](docs/TRANSCRIPTION_BETA.md) · [测试与验收](docs/TESTING.md) · [反馈问题](https://github.com/Sinclair2003/light-recorder/issues)

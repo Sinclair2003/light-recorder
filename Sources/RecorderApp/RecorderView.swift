@@ -1,9 +1,14 @@
 import SwiftUI
 import AppKit
 import RecorderCore
+import UniformTypeIdentifiers
 
 struct RecorderView: View {
     @EnvironmentObject var recorder: RecorderModel
+    @EnvironmentObject var transcription: TranscriptionModel
+    @State private var showingTranscription = false
+    @State private var transcriptionAudio: URL?
+    @State private var importedTranscriptionAudio: [URL] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -11,19 +16,32 @@ struct RecorderView: View {
                 if let icon = AppArtwork.image {
                     Image(nsImage: icon).resizable().frame(width: 36, height: 36)
                 }
-                Text("轻录").font(.system(size: 22, weight: .semibold))
+                Text(showingTranscription ? "录音文字转写 Beta" : "轻录").font(.system(size: 22, weight: .semibold))
                 Spacer()
                 if recorder.hasSession {
                     Label(recorder.paused ? "录音已暂停" : recorder.phaseText, systemImage: recorder.paused ? "pause.circle.fill" : "record.circle.fill")
                         .foregroundStyle(recorder.paused ? .orange : .red)
                 }
+                if showingTranscription {
+                    Button("返回录音", systemImage: "chevron.left") { showingTranscription = false }
+                } else {
+                    Button("录音文字转写 Beta", systemImage: "text.bubble") {
+                        if let running = transcription.runningAudio { transcriptionAudio = running }
+                        showingTranscription = true
+                    }
+                }
             }
-            HStack(alignment: .top, spacing: 20) {
-                ScrollView {
-                    recordingPanel.padding(.trailing, 4)
-                }.frame(width: 360)
-                Divider()
-                RecordingLibraryView(recorder: recorder, playback: recorder.playback)
+            if showingTranscription {
+                TranscriptionPage(recorder: recorder, transcription: transcription,
+                                  selection: $transcriptionAudio, importedAudio: $importedTranscriptionAudio)
+            } else {
+                HStack(alignment: .top, spacing: 20) {
+                    ScrollView {
+                        recordingPanel.padding(.trailing, 4)
+                    }.frame(width: 360)
+                    Divider()
+                    RecordingLibraryView(recorder: recorder, playback: recorder.playback)
+                }
             }
         }
         .padding(20).frame(minWidth: 900, minHeight: 620)
@@ -86,8 +104,9 @@ struct RecorderView: View {
                 Button { Task { await recorder.start() } } label: {
                     Label(recorder.busy ? recorder.phaseText : "开始录音", systemImage: "record.circle")
                         .font(.system(size: 14, weight: .semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
-                }.buttonStyle(.borderedProminent).tint(.blue).disabled(recorder.busy || recorder.deletingRecording)
+                }.buttonStyle(.borderedProminent).tint(.blue).disabled(recorder.busy || recorder.deletingRecording || transcription.isRunning)
             }
+            if transcription.isRunning { Text("转写期间暂不开始新录音").font(.caption).foregroundStyle(.secondary) }
             if recorder.changingControls { ProgressView("正在应用录音设置…").font(.caption) }
 
             Text(recorder.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -137,6 +156,7 @@ struct RecorderView: View {
 struct RecordingLibraryView: View {
     @ObservedObject var recorder: RecorderModel
     @ObservedObject var playback: PlaybackController
+    @EnvironmentObject var transcription: TranscriptionModel
     @State private var pendingDeletion: RecordingEntry?
 
     private var selected: RecordingEntry? { recorder.recordings.first { $0.url == playback.url } }
@@ -187,7 +207,7 @@ struct RecordingLibraryView: View {
                                 Button { recorder.reveal(entry) } label: { Image(systemName: "folder") }
                                     .buttonStyle(.borderless).help("在 Finder 中显示")
                                 Button(role: .destructive) { pendingDeletion = entry } label: { Image(systemName: "trash") }
-                                    .buttonStyle(.borderless).disabled(recorder.busy || recorder.deletingRecording)
+                                    .buttonStyle(.borderless).disabled(recorder.busy || recorder.deletingRecording || transcription.isRunning)
                                     .help("删除录音（移到废纸篓）").accessibilityLabel("删除\(entry.title)")
                             }
                             .padding(10)
@@ -209,7 +229,7 @@ struct RecordingLibraryView: View {
             Button("移到废纸篓", role: .destructive) { Task { await recorder.trashRecording(entry) } }
             Button("取消", role: .cancel) {}
         } message: { entry in
-            Text("“\(entry.title)”会移到废纸篓，可在 Finder 中恢复。如果正在播放，会先停止播放。")
+            Text("“\(entry.title)”会移到废纸篓，可在 Finder 中恢复。如果正在播放，会先停止播放。\(transcription.hasSavedTranscript(for: entry.url) ? " 转写文字会保留。" : "")")
         }
     }
 }

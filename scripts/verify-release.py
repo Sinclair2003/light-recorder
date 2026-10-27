@@ -40,6 +40,8 @@ with ZipFile(archive_path) as archive:
         original = (root / 'Resources' / resource).read_bytes()
         assert (app / 'Contents/Resources' / resource).read_bytes() == original
         assert archive.read('轻录.app/Contents/Resources/' + resource) == original
+    assert archive.read('轻录.app/Contents/Resources/TranscribeWorker.py') == (root / 'Resources/TranscribeWorker.py').read_bytes()
+    assert '轻录.app/Contents/Resources/FunASREngine/python/bin/python3.11' in archive.namelist()
 with tempfile.TemporaryDirectory(prefix='light-recorder-package-check-') as directory:
     subprocess.run(['ditto', '-x', '-k', str(archive_path), directory], check=True)
     extracted = Path(directory) / '轻录.app'
@@ -65,10 +67,15 @@ with tempfile.TemporaryDirectory(prefix='light-recorder-package-check-') as dire
 with (app / 'Contents/Info.plist').open('rb') as handle:
     identity = plistlib.load(handle)
 assert identity['CFBundleIdentifier'] == 'cn.local.lightrecorder'
-assert identity['CFBundleShortVersionString'] == '0.4.2'
+assert identity['CFBundleShortVersionString'] == '0.5.1'
+engine = app / 'Contents/Resources/FunASREngine'
+assert (engine / 'python/bin/python3.11').is_file()
+assert (engine / '.cache/modelscope/models').is_dir()
+subprocess.run(['python3', '-m', 'unittest', 'discover', '-s', 'Tests', '-p', 'TranscriptionWorkerTests.py'], cwd=root, check=True)
 paths = [root / 'Package.swift', *sorted((root / 'Sources').rglob('*.swift')),
          *sorted((root / 'Tests').rglob('*.swift')), *sorted((root / 'scripts').glob('*')),
-         root / 'Resources/Info.plist', root / 'Resources/LightRecorder.icns', root / 'Resources/AppIcon.png']
+         root / 'Resources/Info.plist', root / 'Resources/LightRecorder.icns', root / 'Resources/AppIcon.png',
+         root / 'Resources/TranscribeWorker.py', root / 'Tests/TranscriptionWorkerTests.py']
 manifest = {
     'created_at': datetime.now(timezone.utc).isoformat(),
     'evidence': report['evidence'],
@@ -76,6 +83,9 @@ manifest = {
     'installed_app': str(app), 'archive': str(archive_path),
     'version': identity['CFBundleShortVersionString'],
     'offline_checks_passed': len(report['results']),
+    'offline_report_note': 'Existing recorder-core synthetic baseline; no new 4-hour recording test implied.',
+    'transcription_worker_unit_tests': 'passed',
+    'standalone_transcription_runtime': 'included',
     'installed_and_extracted_signatures': 'codesign --verify --strict passed',
     'archive_integrity_and_utf8_names': 'passed',
     'installed_binary_matches_archive': True,
@@ -89,5 +99,5 @@ verification.mkdir(exist_ok=True, parents=True)
 shutil.copyfile(report_path, verification / 'final-test-report.json')
 shutil.copyfile(root / 'artifacts/final-test-run.log', verification / 'final-test-run.log')
 (verification / 'release-manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
-print('PASS: 32 offline checks, installed signature, extracted signature, UTF-8 archive and binary match.')
+print('PASS: prior recorder offline baseline, transcription worker checks, installed/extracted signature and bundle consistency.')
 print('Actual microphone/system capture remains pending user-started acceptance.')

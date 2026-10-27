@@ -6,12 +6,14 @@ import RecorderCore
 struct LightRecorderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var recorder = RecorderModel()
+    @StateObject private var transcription = TranscriptionModel()
 
     var body: some Scene {
         WindowGroup("轻录", id: "recorder") {
-            RecorderView().environmentObject(recorder)
+            RecorderView().environmentObject(recorder).environmentObject(transcription)
                 .onAppear {
                     delegate.recorder = recorder
+                    delegate.transcription = transcription
                     delegate.applyWindowLayout()
                 }
         }
@@ -24,7 +26,7 @@ struct LightRecorderApp: App {
             }
         }
         MenuBarExtra {
-            MenuBarContent(recorder: recorder)
+            MenuBarContent(recorder: recorder, transcription: transcription)
         } label: {
             if recorder.recording {
                 Label("\(recorder.timeText)", systemImage: "record.circle.fill")
@@ -40,6 +42,7 @@ struct LightRecorderApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var recorder: RecorderModel?
+    weak var transcription: TranscriptionModel?
     private var terminating = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -62,6 +65,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if let transcription, transcription.isRunning {
+            let alert = NSAlert()
+            alert.messageText = "转写正在进行"
+            alert.informativeText = "停止转写后，已处理的文字会保留。"
+            alert.addButton(withTitle: "继续转写")
+            alert.addButton(withTitle: "停止并退出")
+            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            transcription.cancelThen { sender.reply(toApplicationShouldTerminate: true) }
+            return .terminateLater
+        }
         guard let recorder, recorder.busy else { return .terminateNow }
         if recorder.phase == .recording || recorder.paused, !terminating {
             terminating = true
@@ -83,11 +96,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MenuBarContent: View {
     @ObservedObject var recorder: RecorderModel
+    @ObservedObject var transcription: TranscriptionModel
     @Environment(\.openWindow) var openWindow
 
     var body: some View {
         Text("轻录 · \(recorder.phaseText)")
         Text(recorder.mode.title)
+        if transcription.isRunning { Text("转写 Beta · \(transcription.status)") }
         if recorder.hasSession { Text(recorder.timeText) }
         Button("显示录音窗口") {
             openWindow(id: "recorder")
@@ -101,7 +116,7 @@ struct MenuBarContent: View {
             Button("结束并保存") { Task { await recorder.stop() } }
                 .disabled((!recorder.recording && !recorder.paused) || recorder.changingControls)
         } else {
-            Button("开始录音") { Task { await recorder.start() } }.disabled(recorder.busy || recorder.deletingRecording)
+            Button("开始录音") { Task { await recorder.start() } }.disabled(recorder.busy || recorder.deletingRecording || transcription.isRunning)
         }
         Picker("录音来源", selection: Binding(get: { recorder.mode }, set: { value in Task { await recorder.changeMode(value) } })) {
             ForEach(CaptureMode.allCases) { mode in Text(mode.title).tag(mode) }
