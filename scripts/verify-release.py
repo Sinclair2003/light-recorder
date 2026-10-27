@@ -4,6 +4,7 @@ import hashlib
 import json
 import plistlib
 import shutil
+import struct
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -35,18 +36,39 @@ with ZipFile(archive_path) as archive:
     assert all(item.filename.startswith('轻录.app/') and item.flag_bits & 0x800 for item in archive.infolist())
     installed_binary = (app / 'Contents/MacOS/SimpleRecorder').read_bytes()
     assert archive.read('轻录.app/Contents/MacOS/SimpleRecorder') == installed_binary
+    for resource in ['AppIcon.png', 'LightRecorder.icns']:
+        original = (root / 'Resources' / resource).read_bytes()
+        assert (app / 'Contents/Resources' / resource).read_bytes() == original
+        assert archive.read('轻录.app/Contents/Resources/' + resource) == original
 with tempfile.TemporaryDirectory(prefix='light-recorder-package-check-') as directory:
     subprocess.run(['ditto', '-x', '-k', str(archive_path), directory], check=True)
     extracted = Path(directory) / '轻录.app'
     assert (extracted / 'Contents/MacOS/SimpleRecorder').stat().st_mode & 0o111
     subprocess.run(['codesign', '--verify', '--strict', str(extracted)], check=True)
+    # Bundle signing changes the Mach-O signature; compare unsigned temporary copies.
+    normalized = []
+    for index, source in enumerate([app / 'Contents/MacOS/SimpleRecorder', root / '.build/release/SimpleRecorder']):
+        copy = Path(directory) / f'unsigned-{index}'
+        shutil.copyfile(source, copy)
+        subprocess.run(['codesign', '--remove-signature', str(copy)], check=True)
+        data = bytearray(copy.read_bytes())
+        # Re-signing can also resize the virtual reservation for __LINKEDIT.
+        # Removing a signature does not restore this field; all other bytes must match.
+        offset = 32
+        for _ in range(struct.unpack_from('<I', data, 16)[0]):
+            command, size = struct.unpack_from('<II', data, offset)
+            if command == 0x19 and data[offset + 8:offset + 24].rstrip(b'\0') == b'__LINKEDIT':
+                struct.pack_into('<Q', data, offset + 32, 0)
+            offset += size
+        normalized.append(data)
+    assert normalized[0] == normalized[1]
 with (app / 'Contents/Info.plist').open('rb') as handle:
     identity = plistlib.load(handle)
 assert identity['CFBundleIdentifier'] == 'cn.local.lightrecorder'
-assert identity['CFBundleShortVersionString'] == '0.3.0'
+assert identity['CFBundleShortVersionString'] == '0.4.2'
 paths = [root / 'Package.swift', *sorted((root / 'Sources').rglob('*.swift')),
          *sorted((root / 'Tests').rglob('*.swift')), *sorted((root / 'scripts').glob('*')),
-         root / 'Resources/Info.plist', root / 'Resources/LightRecorder.icns']
+         root / 'Resources/Info.plist', root / 'Resources/LightRecorder.icns', root / 'Resources/AppIcon.png']
 manifest = {
     'created_at': datetime.now(timezone.utc).isoformat(),
     'evidence': report['evidence'],
@@ -57,6 +79,7 @@ manifest = {
     'installed_and_extracted_signatures': 'codesign --verify --strict passed',
     'archive_integrity_and_utf8_names': 'passed',
     'installed_binary_matches_archive': True,
+    'installed_binary_matches_current_build_without_signature': True,
     'sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths if p.is_file()},
     'binary_sha256': hashlib.sha256(installed_binary).hexdigest(),
     'archive_sha256': hashlib.sha256(archive_path.read_bytes()).hexdigest(),

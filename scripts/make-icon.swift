@@ -2,28 +2,43 @@ import CoreGraphics
 import ImageIO
 import Foundation
 
-let directory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+guard (3...4).contains(CommandLine.arguments.count) else {
+    fatalError("Usage: swift make-icon.swift source.png output.iconset [--rounded]")
+}
+let input = URL(fileURLWithPath: CommandLine.arguments[1])
+let directory = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
+guard let source = CGImageSourceCreateWithURL(input as CFURL, nil),
+      let original = CGImageSourceCreateImageAtIndex(source, 0, nil) else { fatalError("Cannot read source icon") }
+let rounded = CommandLine.arguments.count == 4 && CommandLine.arguments[3] == "--rounded"
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 for size in [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
         let width = size * scale
-        let context = CGContext(data: nil, width: width, height: width, bitsPerComponent: 8,
-            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        context.scaleBy(x: CGFloat(width) / 1024, y: CGFloat(width) / 1024)
-        let rect = CGRect(x: 74, y: 74, width: 876, height: 876)
-        context.addPath(CGPath(roundedRect: rect, cornerWidth: 205, cornerHeight: 205, transform: nil))
-        context.clip()
-        let colors = [CGColor(red: 0.05, green: 0.50, blue: 0.99, alpha: 1), CGColor(red: 0.12, green: 0.24, blue: 0.83, alpha: 1)]
-        let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 1])!
-        context.drawLinearGradient(gradient, start: CGPoint(x: 200, y: 900), end: CGPoint(x: 850, y: 100), options: [])
-        context.setFillColor(CGColor(gray: 1, alpha: 1))
-        for (i, height) in [150.0, 320, 490, 270, 390, 190].enumerated() {
-            let bar = CGRect(x: 242 + Double(i) * 91, y: 512 - height / 2, width: 46, height: height)
-            context.addPath(CGPath(roundedRect: bar, cornerWidth: 23, cornerHeight: 23, transform: nil)); context.fillPath()
+        guard let context = CGContext(data: nil, width: width, height: width, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { fatalError("Cannot create icon bitmap") }
+        context.interpolationQuality = .high
+        if rounded {
+            // Native app-icon clipping: preserve the original artwork, discard its
+            // opaque outer canvas and shadow. The inset follows this supplied asset.
+            let center = Double(width) / 2
+            let radius = Double(width) * (0.5 - 0.092)
+            let path = CGMutablePath()
+            for step in 0...2048 {
+                let angle = Double(step) / 2048 * 2 * Double.pi
+                let c = cos(angle), s = sin(angle)
+                let point = CGPoint(x: center + radius * (c < 0 ? -1 : 1) * pow(abs(c), 2 / 4.6),
+                                    y: center + radius * (s < 0 ? -1 : 1) * pow(abs(s), 2 / 4.6))
+                if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            path.closeSubpath()
+            context.addPath(path)
+            context.clip()
         }
+        context.draw(original, in: CGRect(x: 0, y: 0, width: width, height: width))
         let name = "icon_\(size)x\(size)\(scale == 2 ? "@2x" : "").png"
-        let destination = CGImageDestinationCreateWithURL(directory.appendingPathComponent(name) as CFURL, "public.png" as CFString, 1, nil)!
-        CGImageDestinationAddImage(destination, context.makeImage()!, nil)
-        guard CGImageDestinationFinalize(destination) else { fatalError("Icon generation failed") }
+        guard let destination = CGImageDestinationCreateWithURL(directory.appendingPathComponent(name) as CFURL, "public.png" as CFString, 1, nil),
+              let image = context.makeImage() else { fatalError("Cannot write icon") }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { fatalError("Icon conversion failed") }
     }
 }

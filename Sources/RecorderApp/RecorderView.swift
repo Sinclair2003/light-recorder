@@ -6,20 +6,19 @@ struct RecorderView: View {
     @EnvironmentObject var recorder: RecorderModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Image(systemName: "waveform.circle.fill").font(.system(size: 42)).foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("轻录").font(.system(size: 25, weight: .semibold))
-                    Text("自由选择声源 · 录音与回放都在这里").font(.subheadline).foregroundStyle(.secondary)
+                if let icon = AppArtwork.image {
+                    Image(nsImage: icon).resizable().frame(width: 36, height: 36)
                 }
+                Text("轻录").font(.system(size: 22, weight: .semibold))
                 Spacer()
                 if recorder.hasSession {
                     Label(recorder.paused ? "录音已暂停" : recorder.phaseText, systemImage: recorder.paused ? "pause.circle.fill" : "record.circle.fill")
                         .foregroundStyle(recorder.paused ? .orange : .red)
                 }
             }
-            HStack(alignment: .top, spacing: 22) {
+            HStack(alignment: .top, spacing: 20) {
                 ScrollView {
                     recordingPanel.padding(.trailing, 4)
                 }.frame(width: 360)
@@ -27,11 +26,11 @@ struct RecorderView: View {
                 RecordingLibraryView(recorder: recorder, playback: recorder.playback)
             }
         }
-        .padding(24).frame(minWidth: 900, minHeight: 660)
+        .padding(20).frame(minWidth: 900, minHeight: 620)
     }
 
     private var recordingPanel: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("录音来源").font(.headline)
             Picker("录音来源", selection: Binding(get: { recorder.mode }, set: { value in Task { await recorder.changeMode(value) } })) {
                 ForEach(CaptureMode.allCases) { mode in Text(mode.title).tag(mode) }
@@ -48,7 +47,7 @@ struct RecorderView: View {
                 if recorder.phase == .saving { ProgressView(value: recorder.progress) }
             }
             .padding(20).frame(maxWidth: .infinity)
-            .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 16))
+            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
 
             if recorder.mode.needsMicrophone {
                 VStack(alignment: .leading, spacing: 8) {
@@ -65,7 +64,7 @@ struct RecorderView: View {
                             Text("所选设备已断开（自动回退）").tag(recorder.microphoneID)
                         }
                     }.labelsHidden().disabled(!recorder.canConfigure)
-                    Text(recorder.recording ? "当前：\(recorder.microphoneStatus) · 可直接切换设备" : "设备断开自动回退；录制中也可切换麦克风。")
+                    Text(recorder.recording ? "当前：\(recorder.microphoneStatus)" : "录制中也可切换设备")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -76,22 +75,22 @@ struct RecorderView: View {
                         Task { if recorder.paused { await recorder.resume() } else { await recorder.pause() } }
                     } label: {
                         Label(recorder.paused ? "继续录音" : "暂停录音", systemImage: recorder.paused ? "play.fill" : "pause.fill")
-                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .frame(maxWidth: .infinity).padding(.vertical, 8)
                     }.buttonStyle(.borderedProminent).tint(.blue).disabled(!recorder.canConfigure)
                     Button { Task { await recorder.stop() } } label: {
-                        Label("结束并保存", systemImage: "stop.fill").frame(maxWidth: .infinity).padding(.vertical, 10)
+                        Label("结束并保存", systemImage: "stop.fill").frame(maxWidth: .infinity).padding(.vertical, 8)
                     }.buttonStyle(.borderedProminent).tint(.red)
                         .disabled((!recorder.recording && !recorder.paused) || recorder.changingControls)
                 }
             } else {
                 Button { Task { await recorder.start() } } label: {
                     Label(recorder.busy ? recorder.phaseText : "开始录音", systemImage: "record.circle")
-                        .font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .font(.system(size: 14, weight: .semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
                 }.buttonStyle(.borderedProminent).tint(.blue).disabled(recorder.busy || recorder.deletingRecording)
             }
             if recorder.changingControls { ProgressView("正在应用录音设置…").font(.caption) }
 
-            Text(recorder.message).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(recorder.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let notice = recorder.routeNotice {
                 Label(notice, systemImage: recorder.reconnecting ? "arrow.triangle.2.circlepath" : "info.circle")
                     .font(.caption).foregroundStyle(recorder.reconnecting ? .orange : .secondary)
@@ -128,7 +127,8 @@ struct RecorderView: View {
                 Spacer()
                 Button("更改…") { recorder.chooseDestination() }.disabled(recorder.busy)
             }
-            Text("录音时可以关闭窗口。双路录音建议戴耳机；请勿合盖或主动睡眠。")
+            Text("关闭窗口后仍会录音")
+                .help("双路录音建议戴耳机；录制时请勿合盖或主动睡眠。")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -155,9 +155,9 @@ struct RecordingLibraryView: View {
 
             if recorder.recordings.isEmpty {
                 VStack(spacing: 12) {
-                    Image(systemName: "waveform").font(.system(size: 34)).foregroundStyle(.secondary)
+                    Image(systemName: "waveform").font(.system(size: 28)).foregroundStyle(.secondary)
                     Text(recorder.refreshingLibrary ? "正在读取录音…" : "暂无录音").font(.headline)
-                    Text("录音保存后会自动出现在这里。\n也可以更改保存位置，查看该文件夹中的音频。")
+                    Text("完成的录音会显示在这里")
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -190,8 +190,8 @@ struct RecordingLibraryView: View {
                                     .buttonStyle(.borderless).disabled(recorder.busy || recorder.deletingRecording)
                                     .help("删除录音（移到废纸篓）").accessibilityLabel("删除\(entry.title)")
                             }
-                            .padding(12)
-                            .background(playback.url == entry.url ? Color.blue.opacity(0.09) : Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                            .padding(10)
+                            .background(playback.url == entry.url ? Color.blue.opacity(0.08) : Color.secondary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
                         }
                     }
                 }.frame(maxHeight: .infinity)
@@ -220,7 +220,7 @@ struct PlaybackView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(playback.url?.deletingPathExtension().lastPathComponent ?? "选择一段录音开始回放")
+            Text(playback.url?.deletingPathExtension().lastPathComponent ?? "选择一段录音")
                 .font(.callout.weight(.medium)).lineLimit(1)
             Slider(value: Binding(get: { playback.position }, set: { playback.seek(to: $0) }), in: 0...max(0.001, playback.duration))
                 .disabled(disabled || playback.duration == 0).accessibilityLabel("播放进度")
@@ -243,7 +243,7 @@ struct PlaybackView: View {
             }.buttonStyle(.borderless).disabled(disabled || playback.duration == 0)
             if let error = playback.error { Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             if disabled { Text("录音或保存期间暂停回放，避免声音再次进入麦克风。").font(.caption).foregroundStyle(.secondary) }
-        }.padding(16).background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+        }.padding(14).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -262,4 +262,8 @@ struct LevelMeter: View {
             }.frame(height: 5)
         }.opacity(enabled ? 1 : 0.45)
     }
+}
+
+private enum AppArtwork {
+    static let image: NSImage? = Bundle.main.url(forResource: "AppIcon", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
 }

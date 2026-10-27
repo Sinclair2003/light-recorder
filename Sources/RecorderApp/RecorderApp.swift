@@ -10,9 +10,12 @@ struct LightRecorderApp: App {
     var body: some Scene {
         WindowGroup("轻录", id: "recorder") {
             RecorderView().environmentObject(recorder)
-                .onAppear { delegate.recorder = recorder }
+                .onAppear {
+                    delegate.recorder = recorder
+                    delegate.applyWindowLayout()
+                }
         }
-        .defaultSize(width: 940, height: 740)
+        .defaultSize(width: 940, height: 700)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
@@ -38,6 +41,23 @@ struct LightRecorderApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var recorder: RecorderModel?
     private var terminating = false
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        if let url = Bundle.main.url(forResource: "LightRecorder", withExtension: "icns") {
+            NSApp.applicationIconImage = NSImage(contentsOf: url)
+        }
+    }
+
+    func applyWindowLayout() {
+        // Restore the two-column window once, then respect the user's resizing.
+        guard UserDefaults.standard.integer(forKey: "uiLayoutVersion") < 5 else { return }
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.contains("recorder") == true || $0.title == "轻录" }) else { return }
+            window.setContentSize(NSSize(width: 940, height: 700))
+            window.center()
+            UserDefaults.standard.set(5, forKey: "uiLayoutVersion")
+        }
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 

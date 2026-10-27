@@ -465,7 +465,7 @@ final class RecorderModel: ObservableObject {
             lastFile = url
             if let interruption = session.info.interruption { message = "已保存中断前的内容。\n\(interruption)" }
             else if !(session.info.notices ?? []).isEmpty { message = "录音已保存；暂停、切换等提示可在列表中查看。" }
-            else { message = "录音已保存，可以直接在右侧播放。" }
+            else { message = "录音已保存，可在列表中选择播放。" }
             errorMessage = nil; refreshLibrary(select: url)
         } catch {
             message = "导出失败，录音缓存已保留。可选择其他保存位置后重试。"
