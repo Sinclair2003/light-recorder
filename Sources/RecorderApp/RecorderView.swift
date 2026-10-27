@@ -14,7 +14,7 @@ struct RecorderView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 if let icon = AppArtwork.image {
-                    Image(nsImage: icon).resizable().frame(width: 36, height: 36)
+                    Image(nsImage: icon).resizable().frame(width: 56, height: 56)
                 }
                 Text(showingTranscription ? "录音文字转写 Beta" : "轻录").font(.system(size: 22, weight: .semibold))
                 Spacer()

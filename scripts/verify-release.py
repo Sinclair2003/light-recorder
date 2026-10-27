@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix='light-recorder-package-check-') as dire
 with (app / 'Contents/Info.plist').open('rb') as handle:
     identity = plistlib.load(handle)
 assert identity['CFBundleIdentifier'] == 'cn.local.lightrecorder'
-assert identity['CFBundleShortVersionString'] == '0.5.1'
+assert identity['CFBundleShortVersionString'] == '0.5.2'
 engine = app / 'Contents/Resources/FunASREngine'
 assert (engine / 'python/bin/python3.11').is_file()
 assert (engine / '.cache/modelscope/models').is_dir()
